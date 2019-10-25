@@ -187,6 +187,16 @@ namespace NS_SLUA {
 		}
 		return nullptr;
 	}
+    
+    void LuaState::luaGC() {
+        if (enableMultiThreadGC && L)
+        {
+            lua_gc(L, LUA_GCCOLLECT, 128);
+            Log::Log("LuaState : GC success");
+            return;
+        }
+        Log::Log("LuaState : GC faild");
+    }
 
     // check lua top , this function can omit
     void LuaState::Tick(float dtime) {

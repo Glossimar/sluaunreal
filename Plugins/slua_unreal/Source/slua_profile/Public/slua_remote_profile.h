@@ -143,6 +143,7 @@ namespace slua {
 
 	public:
 		int Event;
+        int index;
 		int64_t Time;
 
 		int Linedefined;

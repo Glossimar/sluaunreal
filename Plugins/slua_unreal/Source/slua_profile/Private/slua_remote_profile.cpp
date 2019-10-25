@@ -355,6 +355,8 @@ namespace slua
         if(Event == NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK)
         {
             MessageReader << memoryInfoList;
+            MessageReader << index;
+            UE_LOG(LogTemp, Warning, TEXT("Lua Staty : receieving %d"), index);
             return true;
         }
         

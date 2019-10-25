@@ -16,6 +16,7 @@
 #include "LuaState.h"
 #include "ArrayWriter.h"
 #include "LuaMemoryProfile.h"
+#include "Containers/Queue.h"
 #include "luasocket/auxiliar.h"
 #include "luasocket/buffer.h"
 
@@ -43,12 +44,14 @@ namespace NS_SLUA {
 
 	namespace {
 
+        int memInfoQueueSize = 0;
 		LuaVar selfProfiler;
 		bool ignoreHook = false;
 		HookState currentHookState = HookState::UNHOOK;
 		int64 profileTotalCost = 0;
 		p_tcp tcpSocket = nullptr;
 		const char* ChunkName = "[ProfilerScript]";
+        TQueue<TArray<LuaMemInfo>> stayMemInfoQueue;
 
 		void makeProfilePackage(FArrayWriter& messageWriter,
 			int hookEvent, int64 time,
@@ -73,7 +76,7 @@ namespace NS_SLUA {
         }
 
         void makeMemoryProfilePackage(FArrayWriter& messageWriter,
-                                int hookEvent, TArray<LuaMemInfo> memInfoList)
+                                int hookEvent, TArray<LuaMemInfo> memInfoList, int index)
         {
             uint32 packageSize = 0;
 
@@ -81,7 +84,7 @@ namespace NS_SLUA {
             messageWriter << packageSize;
             messageWriter << hookEvent;
             messageWriter << memInfoList;
-
+            messageWriter << index;
             messageWriter.Seek(0);
             packageSize = messageWriter.TotalSize() - sizeof(uint32);
             messageWriter << packageSize;
@@ -125,12 +128,12 @@ namespace NS_SLUA {
 			sendMessage(s_messageWriter);
 		}
 
-        void takeMemorySample(int event, TArray<LuaMemInfo> memoryInfoList) {
+        void takeMemorySample(int event, TArray<LuaMemInfo> memoryInfoList, int index) {
             // clear writer;
             static FArrayWriter s_memoryMessageWriter;
             s_memoryMessageWriter.Empty();
             s_memoryMessageWriter.Seek(0);
-            makeMemoryProfilePackage(s_memoryMessageWriter, event, memoryInfoList);
+            makeMemoryProfilePackage(s_memoryMessageWriter, event, memoryInfoList, index);
             sendMessage(s_memoryMessageWriter);
         }
 
@@ -198,17 +201,40 @@ namespace NS_SLUA {
 		if (currentHookState == HookState::UNHOOK) {
 			selfProfiler.callField("reConnect", selfProfiler);
             ignoreHook = false;
+            
+            TArray<LuaMemInfo> memoryInfoList;
+            for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
+                memoryInfoList.Add(memInfo.Value);
+            }
+            if(memInfoQueueSize > 300)
+            {
+                stayMemInfoQueue.Pop();
+                memInfoQueueSize --;
+            }
+            stayMemInfoQueue.Enqueue(memoryInfoList);
+            memInfoQueueSize ++;
 			return;
 		}
         
 		RunState currentRunState = (RunState)selfProfiler.getFromTable<int>("currentRunState");
 		if (currentRunState == RunState::CONNECTED) {
             TArray<LuaMemInfo> memoryInfoList;
+            
+            while(!stayMemInfoQueue.IsEmpty())
+            {
+                memoryInfoList.Empty();
+                stayMemInfoQueue.Dequeue(memoryInfoList);
+                memInfoQueueSize --;
+                takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, memInfoQueueSize);
+            }
+            
+            memoryInfoList.Empty();
+            
             for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
                 memoryInfoList.Add(memInfo.Value);
             }
             
-            takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList);
+            takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, -1);
 			takeSample(NS_SLUA::ProfilerHookEvent::PHE_TICK, -1, "", "");
 		}
 		ignoreHook = false;

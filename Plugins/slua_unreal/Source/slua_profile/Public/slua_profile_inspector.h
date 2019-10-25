@@ -62,7 +62,7 @@ public:
     SProfilerInspector();
     ~SProfilerInspector();
     
-    void Refresh(TArray<SluaProfiler>& curProfilersArray, TArray<NS_SLUA::LuaMemInfo> memoryInfoList);
+    void Refresh(TArray<SluaProfiler>& curProfilersArray, TArray<NS_SLUA::LuaMemInfo>& memoryInfoList);
     TSharedRef<class SDockTab> GetSDockTab();
     TSharedRef<ITableRow> OnGenerateMemRowForList(TSharedPtr<FileMemInfo> Item, const TSharedRef<STableViewBase>& OwnerTable);
     TSharedRef<ITableRow> OnGenerateRowForList(TSharedPtr<FunctionProfileInfo> Item, const TSharedRef<STableViewBase>& OwnerTable);

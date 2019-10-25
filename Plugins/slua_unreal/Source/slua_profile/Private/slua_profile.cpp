@@ -36,8 +36,9 @@ namespace {
 
 	static const FString CoroutineName(TEXT("coroutine"));
 	SluaProfiler curProfiler;
-	
-    TArray<NS_SLUA::LuaMemInfo> memoryInfo;
+    int receIndex = 0;
+    TQueue<TArray<NS_SLUA::LuaMemInfo>> memInfoQueue;
+    
 	TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe> curProfilersArray = MakeShareable(new TArray<SluaProfiler>());
 	TQueue<TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe>, EQueueMode::Mpsc> profilerArrayQueue;
 
@@ -102,13 +103,27 @@ bool Fslua_profileModule::Tick(float DeltaTime)
 	{
 		return true;
 	}
-
-	while (!profilerArrayQueue.IsEmpty())
+    
+    UE_LOG(LogTemp, Warning, TEXT("Lua Staty : Tick"));
+    
+    if(receIndex == -1)
+    {
+	while (!profilerArrayQueue.IsEmpty() || !memInfoQueue.IsEmpty())
 	{
-		TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe> profilesArray;
-		profilerArrayQueue.Dequeue(profilesArray);
-		sluaProfilerInspector->Refresh(*profilesArray.Get(), memoryInfo);
+		TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe> profilesArrayPtr;
+        TArray<NS_SLUA::LuaMemInfo> memoryInfo;
+        TArray<SluaProfiler> profilesArray;
+//        UE_LOG(LogTemp, Warning, TEXT("Lua Staty : refresh %d"), receIndex);
+        
+        if(!profilerArrayQueue.IsEmpty())
+        {
+            profilerArrayQueue.Dequeue(profilesArrayPtr);
+            profilesArray = *profilesArrayPtr.Get();
+        }
+        memInfoQueue.Dequeue(memoryInfo);
+		sluaProfilerInspector->Refresh(profilesArray, memoryInfo);
 	}
+    }
 
 	return true;
 }
@@ -124,7 +139,7 @@ TSharedRef<class SDockTab> Fslua_profileModule::OnSpawnPluginTab(const FSpawnTab
 
 		ProfileServer = new slua::FProfileServer();
 		ProfileServer->OnProfileMessageRecv().BindLambda([this](slua::FProfileMessagePtr Message) {
-			this->debug_hook_c(Message->Event, Message->Time, Message->Linedefined, Message->Name, Message->ShortSrc,  Message->memoryInfoList);
+			this->debug_hook_c(Message->Event, Message->Time, Message->Linedefined, Message->Name, Message->ShortSrc,  Message->memoryInfoList, Message->index);
 		});
 
 		tabOpened = true;
@@ -256,7 +271,7 @@ void Fslua_profileModule::OnTabClosed(TSharedRef<SDockTab>)
 	tabOpened = false;
 }
 
-void Fslua_profileModule::debug_hook_c(int event, double nanoseconds, int linedefined, const FString& name, const FString& short_src, TArray<NS_SLUA::LuaMemInfo> memoryInfoList)
+void Fslua_profileModule::debug_hook_c(int event, double nanoseconds, int linedefined, const FString& name, const FString& short_src, TArray<NS_SLUA::LuaMemInfo> memoryInfoList, int index)
 {
 	if (event == NS_SLUA::ProfilerHookEvent::PHE_CALL)
 	{
@@ -291,7 +306,9 @@ void Fslua_profileModule::debug_hook_c(int event, double nanoseconds, int linede
 		ClearCurProfiler();
 	}
     else if (event == NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK) {
-        memoryInfo = memoryInfoList;
+        memInfoQueue.Enqueue(memoryInfoList);
+        receIndex = index;
+        UE_LOG(LogTemp, Warning, TEXT("Lua Staty : refresh %d"), index);
     }
 }
 

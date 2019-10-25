@@ -118,10 +118,11 @@ void  SProfilerInspector::CopyFunctionNode(TSharedPtr<FunctionProfileInfo>& oldF
 	newFuncNode->mergeIdxArray = oldFuncNode->mergeIdxArray;
 }
 
-void SProfilerInspector::Refresh(TArray<SluaProfiler>& profilersArray, TArray<NS_SLUA::LuaMemInfo> memoryInfoList)
+void SProfilerInspector::Refresh(TArray<SluaProfiler>& profilersArray, TArray<NS_SLUA::LuaMemInfo>& memoryInfoList)
 {
-	if (stopChartRolling == true || profilersArray.Num() == 0)
+	if (stopChartRolling == true || profilersArray.Num() == 0 || memoryInfoList.Num() == 0)
 	{
+        if (!stopChartRolling && memoryInfoList.Num() != 0) CollectMemoryNode(memoryInfoList);
 		return;
 	}
 
@@ -748,8 +749,9 @@ TSharedRef<class SDockTab>  SProfilerInspector::GetSDockTab()
                              .Text(FText::FromName("Forced GC"))
                              .ContentPadding(FMargin(2.0, 2.0))
                              .OnClicked(FOnClicked::CreateLambda([=]() -> FReply {
-        
-                                 return FReply::Handled();
+                                NS_SLUA::LuaState state;
+                                state.luaGC();
+                                return FReply::Handled();
                              }))
                          ]
 					]

@@ -100,6 +100,7 @@ namespace NS_SLUA {
 
         // get LuaState from name
         static LuaState* get(const FString& name);
+        void SLUA_UNREAL_API luaGC();
 
         // return specified index is valid state index
         inline static bool isValid(int index)  {
