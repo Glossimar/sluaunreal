@@ -254,7 +254,7 @@ namespace slua
 			uint8 Dummy;
 			if (!Socket->Recv(&Dummy, 1, BytesRead, ESocketReceiveFlags::Peek))
 			{
-                UE_LOG(LogSluaProfile, Verbose, TEXT("Lua Staty : Dummy read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
+                UE_LOG(LogSluaProfile, Verbose, TEXT("Dummy read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
 				return false;
 			}
 		}
@@ -286,7 +286,7 @@ namespace slua
                 BytesRead = 0;
                 if (!Socket->Recv(MessagesizeData.GetData(), sizeof(uint32), BytesRead))
                 {
-                    UE_LOG(LogSluaProfile, Verbose, TEXT("Lua Staty : In progress read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
+                    UE_LOG(LogSluaProfile, Verbose, TEXT("In progress read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
                     return false;
                 }
 
@@ -304,7 +304,7 @@ namespace slua
 			BytesRead = 0;
 			if (!Socket->Recv(RecvMessageData->GetData() + RecvMessageData->Num() - RecvMessageDataRemaining, RecvMessageDataRemaining, BytesRead))
 			{
-                UE_LOG(LogSluaProfile, Verbose, TEXT("Lua Staty : Read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
+                UE_LOG(LogSluaProfile, Verbose, TEXT("Read failed with code %d"), (int32)SocketSubsystem->GetLastErrorCode());
 				return false;
 			}
 
@@ -356,7 +356,6 @@ namespace slua
         {
             MessageReader << memoryInfoList;
             MessageReader << index;
-            UE_LOG(LogTemp, Warning, TEXT("Lua Staty : receieving %d"), index);
             return true;
         }
         

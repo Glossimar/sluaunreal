@@ -104,14 +104,13 @@ bool Fslua_profileModule::Tick(float DeltaTime)
 		return true;
 	}
     
-    UE_LOG(LogTemp, Warning, TEXT("Lua Staty : Tick"));
+    UE_LOG(LogTemp, Warning, TEXT("Tick"));
     
 	while (!profilerArrayQueue.IsEmpty() || !memInfoQueue.IsEmpty())
 	{
 		TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe> profilesArrayPtr;
         TArray<NS_SLUA::LuaMemInfo> memoryInfo;
         TArray<SluaProfiler> profilesArray;
-//        UE_LOG(LogTemp, Warning, TEXT("Lua Staty : refresh %d"), receIndex);
         
         if(!profilerArrayQueue.IsEmpty())
         {
@@ -305,7 +304,6 @@ void Fslua_profileModule::debug_hook_c(int event, double nanoseconds, int linede
     else if (event == NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK) {
         memInfoQueue.Enqueue(memoryInfoList);
         receIndex = index;
-        UE_LOG(LogTemp, Warning, TEXT("Lua Staty : refresh %d"), index);
     }
 }
 

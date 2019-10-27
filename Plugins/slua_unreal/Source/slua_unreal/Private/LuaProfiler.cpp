@@ -115,7 +115,7 @@ namespace NS_SLUA {
 			size_t sent;
 			int err = sendraw(&tcpSocket->buf, (const char*)msg.GetData(), msg.Num(), &sent);
 			if (err != IO_DONE) {
-                Log::Log("Lua Staty : send falid %d， err : %d , total : %f , block : %f", memInfoQueueSize, err, tcpSocket->tm.total, tcpSocket->tm.block);
+                Log::Log("send falid item index : %d， err : %d", memInfoQueueSize, err);
 				selfProfiler.callField("disconnect");
 			}
 		}
@@ -174,10 +174,10 @@ namespace NS_SLUA {
 				return 0;
 			}
 			tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
-            Log::Log("Lua Staty : total : %f , block : %f", tcpSocket->tm.total, tcpSocket->tm.block);
-            double tot = tcpSocket->tm.total *3;
+            Log::Log("total : %f , block : %f", tcpSocket->tm.total, tcpSocket->tm.block);
+            double total = tcpSocket->tm.total *3;
             double block = tcpSocket->tm.block *3;
-            tcpSocket->tm.total += tot;
+            tcpSocket->tm.total += total;
             tcpSocket->tm.block += block;
 			if (!tcpSocket) luaL_error(L, "Set invalid socket");
 			return 0;
@@ -232,14 +232,13 @@ namespace NS_SLUA {
                 stayMemInfoQueue.Dequeue(memoryInfoList);
                 memInfoQueueSize --;
                 takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, memInfoQueueSize);
-                Log::Log("Lua Staty :  send %d", memInfoQueueSize);
             }
             
             memoryInfoList.Empty();
             
             for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
                 memoryInfoList.Add(memInfo.Value);
-            }
+            } 
             
             takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, -1);
 			takeSample(NS_SLUA::ProfilerHookEvent::PHE_TICK, -1, "", "");
