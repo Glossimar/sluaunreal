@@ -106,8 +106,6 @@ bool Fslua_profileModule::Tick(float DeltaTime)
     
     UE_LOG(LogTemp, Warning, TEXT("Lua Staty : Tick"));
     
-    if(receIndex == -1)
-    {
 	while (!profilerArrayQueue.IsEmpty() || !memInfoQueue.IsEmpty())
 	{
 		TSharedPtr<TArray<SluaProfiler>, ESPMode::ThreadSafe> profilesArrayPtr;
@@ -123,8 +121,7 @@ bool Fslua_profileModule::Tick(float DeltaTime)
         memInfoQueue.Dequeue(memoryInfo);
 		sluaProfilerInspector->Refresh(profilesArray, memoryInfo);
 	}
-    }
-
+    
 	return true;
 }
 
