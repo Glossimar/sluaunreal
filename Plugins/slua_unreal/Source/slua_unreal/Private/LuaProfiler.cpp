@@ -225,24 +225,37 @@ namespace NS_SLUA {
 		RunState currentRunState = (RunState)selfProfiler.getFromTable<int>("currentRunState");
 		if (currentRunState == RunState::CONNECTED) {
             TArray<LuaMemInfo> memoryInfoList;
-            
-            while(!stayMemInfoQueue.IsEmpty())
+            if(memInfoQueueSize != 0)
+            {
+                while((300 - memInfoQueueSize) % 30 != 0)
+                {
+                    memoryInfoList.Empty();
+                    stayMemInfoQueue.Dequeue(memoryInfoList);
+                    memInfoQueueSize --;
+                    takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, memInfoQueueSize);
+                }
+                memoryInfoList.Empty();
+                for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
+                    memoryInfoList.Add(memInfo.Value);
+                }
+
+                stayMemInfoQueue.Enqueue(memoryInfoList);
+                memInfoQueueSize ++;
+                
+                if((300 - memInfoQueueSize) % 30 == 0 && memInfoQueueSize != 0) memInfoQueueSize--;
+            }
+            else
             {
                 memoryInfoList.Empty();
-                stayMemInfoQueue.Dequeue(memoryInfoList);
-                memInfoQueueSize --;
-                takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, memInfoQueueSize);
+                
+                for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
+                    memoryInfoList.Add(memInfo.Value);
+                }
+                
+                takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, -1);
             }
-            
-            memoryInfoList.Empty();
-            
-            for(auto& memInfo : NS_SLUA::LuaMemoryProfile::memDetail()) {
-                memoryInfoList.Add(memInfo.Value);
-            } 
-            
-            takeMemorySample(NS_SLUA::ProfilerHookEvent::PHE_MEMORY_TICK, memoryInfoList, -1);
-			takeSample(NS_SLUA::ProfilerHookEvent::PHE_TICK, -1, "", "");
-		}
+             takeSample(NS_SLUA::ProfilerHookEvent::PHE_TICK, -1, "", "");
+        }
 		ignoreHook = false;
 	}
 
