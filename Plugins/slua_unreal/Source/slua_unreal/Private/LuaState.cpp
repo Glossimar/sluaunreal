@@ -496,20 +496,14 @@ namespace NS_SLUA {
 		// remove ref, Object must be an UObject in slua
 		objRefs.Remove(const_cast<UObject*>(Object));
 
-		// maybe ud is nullptr or had been freed
-		if (!ud) {
-			// remove should put here avoid ud is invalid
-			objRefs.Remove(const_cast<UObject*>(Object));
-			return;
-		}
-		else if (ud->flag & UD_HADFREE)
+		if (!ud || ud->flag & UD_HADFREE)
 			return;
 
 		// indicate ud had be free
 		ud->flag |= UD_HADFREE;
 		// remove cache
 		ensure(ud->ud == Object);
-		LuaObject::removeFromCache(L, ud->ud);
+		LuaObject::removeFromCache(L, (void*)Object);
 	}
 
 	void LuaState::AddReferencedObjects(FReferenceCollector & Collector)
@@ -789,7 +783,6 @@ namespace NS_SLUA {
 			FPlatformProcess::Sleep(1.0f);
 			if (frameCounter.GetValue() != 0) {
 				timeoutCounter.Increment();
-				Log::Log("script run time %d", timeoutCounter.GetValue());
 				if(timeoutCounter.GetValue() >= MaxLuaExecTime)
 					onScriptTimeout();
 			}
