@@ -20,6 +20,7 @@
 #include <memory>
 #include <atomic>
 #include "HAL/Runnable.h"
+#include "LuaProfiler.h"
 #include "Tickable.h"
 
 #define SLUA_LUACODE "[sluacode]"
@@ -279,6 +280,6 @@ namespace NS_SLUA {
 		TMap<lua_State*, int> threadToRef;                                // coroutine -> ref
 		TMap<int, lua_State*> refToThread;                                // coroutine -> ref
 		ULatentDelegate* latentDelegate;
-
+        LuaProfiler profiler;
     };
 }

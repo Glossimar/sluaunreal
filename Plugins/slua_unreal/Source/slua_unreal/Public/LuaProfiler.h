@@ -35,11 +35,15 @@ namespace NS_SLUA {
 	class SLUA_UNREAL_API LuaProfiler
 	{
 	public:
+        LuaProfiler(){}
 		LuaProfiler(const char* funcName);
 		~LuaProfiler();
 		
 		static void init(lua_State* L);
 		static void tick(lua_State* L);
+        
+        static int changeHookState(lua_State* L);
+        static int setSocket(lua_State* L);
 	};
 
 #ifdef ENABLE_PROFILER

@@ -330,53 +330,55 @@ namespace NS_SLUA {
 
             takeSample(ar->event,ar->linedefined, ar->name ? ar->name : "", ar->short_src);
 		}
+    }
 
-		int changeHookState(lua_State* L) {
-			HookState state = (HookState)lua_tointeger(L, 1);
-			currentHookState = state;
-			if (state == HookState::UNHOOK) {
+    int LuaProfiler::changeHookState(lua_State* L)
+    {
+        HookState state = (HookState)lua_tointeger(L, 1);
+        currentHookState = state;
+        if (state == HookState::UNHOOK) {
 //                LuaMemoryProfile::stop();
-				lua_sethook(L, nullptr, 0, 0);
-			}
-			else if (state == HookState::HOOKED) {
-                LuaMemoryProfile::start();
-				lua_sethook(L, debug_hook, LUA_MASKRET | LUA_MASKCALL, 0);
-			}
-			else
-				luaL_error(L, "Set error value to hook state");
-			return 0;
-		}
+            lua_sethook(L, nullptr, 0, 0);
+        }
+        else if (state == HookState::HOOKED) {
+            LuaMemoryProfile::start();
+            lua_sethook(L, debug_hook, LUA_MASKRET | LUA_MASKCALL, 0);
+        }
+        else
+            luaL_error(L, "Set error value to hook state");
+        return 0;
+    }
 
-		int setSocket(lua_State* L) {
-			if (lua_isnil(L, 1)) {
-				tcpSocket = nullptr;
-				return 0;
-			}
-			tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
-			if (!tcpSocket) luaL_error(L, "Set invalid socket");
-			return 0;
-		}
-	}
+    int LuaProfiler::setSocket(lua_State* L)
+    {
+        if (lua_isnil(L, 1)) {
+            tcpSocket = nullptr;
+            return 0;
+        }
+        tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
+        if (!tcpSocket) luaL_error(L, "Set invalid socket");
+        return 0;
+    }
 
 	void LuaProfiler::init(lua_State* L)
 	{
         currentHookState = HookState::UNHOOK;
 		auto ls = LuaState::get(L);
 		ensure(ls);
-        if(!selfProfiler.isValid())
-        {
-            selfProfiler = ls->doBuffer((const uint8*)ProfilerScript,strlen(ProfilerScript), ChunkName);
-            ensure(selfProfiler.isValid());
-            selfProfiler.push(L);
-            lua_pushcfunction(L, changeHookState);
-            lua_setfield(L, -2, "changeHookState");
-            lua_pushcfunction(L, setSocket);
-            lua_setfield(L, -2, "setSocket");
-            // using native hook instead of lua hook for performance
-            // set selfProfiler to global as slua_profiler
-            lua_setglobal(L, "slua_profile");
-            ensure(lua_gettop(L) == 0);
-        }
+//        if(!selfProfiler.isValid())
+//        {
+        selfProfiler = ls->doBuffer((const uint8*)ProfilerScript,strlen(ProfilerScript), ChunkName);
+        ensure(selfProfiler.isValid());
+        selfProfiler.push(L);
+        lua_pushcfunction(L, &LuaProfiler::changeHookState);
+        lua_setfield(L, -2, "changeHookState");
+        lua_pushcfunction(L, &LuaProfiler::setSocket);
+        lua_setfield(L, -2, "setSocket");
+        // using native hook instead of lua hook for performance
+        // set selfProfiler to global as slua_profiler
+        lua_setglobal(L, "slua_profile");
+        ensure(lua_gettop(L) == 0);
+//        }
 	}
 
 	void LuaProfiler::tick(lua_State* L)
