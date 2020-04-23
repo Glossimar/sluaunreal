@@ -60,6 +60,71 @@ namespace NS_SLUA {
 			, getter(getterf)
 			, setter(setterf) {}
 	};
+
+    #if ENGINE_MINOR_VERSION >= 23 && (PLATFORM_MAC || PLATFORM_IOS)
+    struct FNewFrame : public FOutputDevice
+        {
+        public:
+            // Variables.
+            UFunction* Node;
+            UObject* Object;
+            uint8* Code;
+            uint8* Locals;
+            
+            UProperty* MostRecentProperty;
+            uint8* MostRecentPropertyAddress;
+            
+            /** The execution flow stack for compiled Kismet code */
+            FlowStackType FlowStack;
+            
+            /** Previous frame on the stack */
+            FFrame* PreviousFrame;
+            
+            /** contains information on any out parameters */
+            FOutParmRec* OutParms;
+            
+            /** If a class is compiled in then this is set to the property chain for compiled-in functions. In that case, we follow the links to setup the args instead of executing by code. */
+            UField* PropertyChainForCompiledIn;
+            
+            /** Currently executed native function */
+            UFunction* CurrentNativeFunction;
+            
+            bool bArrayContextFailed;
+        public:
+            
+            // Constructors.
+            FNewFrame( UObject* InObject, UFunction* InNode, void* InLocals, FFrame* InPreviousFrame = NULL, UField* InPropertyChainForCompiledIn = NULL )
+            : Node(InNode)
+            , Object(InObject)
+            , Code(InNode->Script.GetData())
+            , Locals((uint8*)InLocals)
+            , MostRecentProperty(NULL)
+            , MostRecentPropertyAddress(NULL)
+            , PreviousFrame(InPreviousFrame)
+            , OutParms(NULL)
+            , PropertyChainForCompiledIn(InPropertyChainForCompiledIn)
+            , CurrentNativeFunction(NULL)
+            , bArrayContextFailed(false)
+            {
+        #if DO_BLUEPRINT_GUARD
+                FBlueprintExceptionTracker::Get().ScriptStack.Push((FFrame *)this);
+        #endif
+            }
+            
+            virtual ~FNewFrame()
+            {
+                #if DO_BLUEPRINT_GUARD
+                    FBlueprintExceptionTracker& BlueprintExceptionTracker = FBlueprintExceptionTracker::Get();
+                    if (BlueprintExceptionTracker.ScriptStack.Num())
+                    {
+                        BlueprintExceptionTracker.ScriptStack.Pop(false);
+                    }
+                #endif
+            }
+            
+            virtual void Serialize( const TCHAR* V, ELogVerbosity::Type Verbosity, const class FName& Category ) {};
+        };
+    #endif
     
     TMap< UClass*, TMap<FString, ExtensionField> > extensionMMap;
     TMap< UClass*, TMap<FString, ExtensionField> > extensionMMap_static;
@@ -462,7 +527,7 @@ namespace NS_SLUA {
         
     }
 
-    void fillParam(lua_State* L,int i,UFunction* func,uint8* params) {
+    void LuaObject::fillParam(lua_State* L,int i,UFunction* func,uint8* params) {
 		auto funcFlag = func->FunctionFlags;
         for(TFieldIterator<UProperty> it(func);it && (it->PropertyFlags&CPF_Parm);++it) {
             UProperty* prop = *it;
@@ -491,8 +556,82 @@ namespace NS_SLUA {
         }
     }
 
+	void LuaObject::callRpc(lua_State* L, UObject* obj, UFunction* func, uint8* params) {
+		// call rpc without outparams
+		const bool bHasReturnParam = func->ReturnValueOffset != MAX_uint16;
+		uint8* ReturnValueAddress = bHasReturnParam ? ((uint8*)params + func->ReturnValueOffset) : nullptr;
+        
+        #if ENGINE_MINOR_VERSION >= 23 && (PLATFORM_MAC || PLATFORM_IOS)
+            FNewFrame NewStack(obj, func, params, NULL, func->Children);
+        #else
+            FFrame NewStack(obj, func, params, NULL, func->Children);
+        #endif
+        
+        #if ENGINE_MINOR_VERSION < 25
+            if (func->ReturnValueOffset != MAX_uint16) {
+                UProperty* ReturnProperty = func->GetReturnProperty();
+                if (ensure(ReturnProperty)) {
+                    FOutParmRec* RetVal = (FOutParmRec*)FMemory_Alloca(sizeof(FOutParmRec));
+
+                    /* Our context should be that we're in a variable assignment to the return value, so ensure that we have a valid property to return to */
+                    RetVal->PropAddr = (uint8*)FMemory_Alloca(ReturnProperty->GetSize());
+                    RetVal->Property = ReturnProperty;
+                    NewStack.OutParms = RetVal;
+                }
+            }
+
+            NewStack.Locals = params;
+            FOutParmRec** LastOut = &NewStack.OutParms;
+
+            for (UProperty* Property = (UProperty*)func->Children; Property!=nullptr; Property = (UProperty*)Property->Next){
+                if (Property->PropertyFlags & CPF_OutParm){
+
+                    CA_SUPPRESS(6263)
+                        FOutParmRec* Out = (FOutParmRec*)FMemory_Alloca(sizeof(FOutParmRec));
+                    // set the address and property in the out param info
+                    // warning: Stack.MostRecentPropertyAddress could be NULL for optional out parameters
+                    // if that's the case, we use the extra memory allocated for the out param in the function's locals
+                    // so there's always a valid address
+                    Out->PropAddr = Property->ContainerPtrToValuePtr<uint8>(NewStack.Locals);
+                    Out->Property = Property;
+
+                    // add the new out param info to the stack frame's linked list
+                    if (*LastOut) {
+                        (*LastOut)->NextOutParm = Out;
+                        LastOut = &(*LastOut)->NextOutParm;
+                    } else {
+                        *LastOut = Out;
+                    }
+                } else {
+                    // copy the result of the expression for this parameter into the appropriate part of the local variable space
+                    uint8* Param = Property->ContainerPtrToValuePtr<uint8>(NewStack.Locals);
+                    Property->InitializeValue_InContainer(NewStack.Locals);
+                }
+            }
+        #else
+            NewStack.OutParms = nullptr;
+        #endif
+    
+        #if ENGINE_MINOR_VERSION >= 23 && (PLATFORM_MAC || PLATFORM_IOS)
+            FFrame *frame = (FFrame *)&NewStack;
+            func->Invoke(obj, *frame, ReturnValueAddress);
+        #else
+            func->Invoke(obj, NewStack, ReturnValueAddress);
+        #endif
+	}
+
+	void LuaObject::callUFunction(lua_State* L, UObject* obj, UFunction* func, uint8* params) {
+		auto ff = func->FunctionFlags;
+		// it's an RPC function
+		if (ff&FUNC_Net)
+			LuaObject::callRpc(L, obj, func, params);
+		else
+		// it's a local function
+			obj->ProcessEvent(func, params);
+	}
+
     // handle return value and out params
-    int returnValue(lua_State* L,UFunction* func,uint8* params) {
+    int LuaObject::returnValue(lua_State* L,UFunction* func,uint8* params) {
 
         // check is function has return value
 		const bool bHasReturnParam = func->ReturnValueOffset != MAX_uint16;
@@ -553,14 +692,12 @@ namespace NS_SLUA {
         UFunction* func = reinterpret_cast<UFunction*>(ud);
         
 		FStructOnScope params(func);
-		fillParam(L, offset, func, params.GetStructMemory());
+		LuaObject::fillParam(L, offset, func, params.GetStructMemory());
 		{
-			// FEditorScriptExecutionGuard scriptGuard;
-			// call function with params
-			obj->ProcessEvent(func, params.GetStructMemory());
+			LuaObject::callUFunction(L, obj, func, params.GetStructMemory());
 		}
 		// return value to push lua stack
-		return returnValue(L, func, params.GetStructMemory());
+		return LuaObject::returnValue(L, func, params.GetStructMemory());
     }
 
     // find ufunction from cache
@@ -733,13 +870,14 @@ namespace NS_SLUA {
         else {
             // if ud isn't a uobject, get __name of metatable to cast it to string
             const void* ptr = lua_topointer(L,1);
-            luaL_getmetafield(L,1,"__name");
+            int tt = luaL_getmetafield(L,1,"__name");
             // should have __name field
-            if(lua_type(L,-1)==LUA_TSTRING) {
+            if(tt==LUA_TSTRING) {
                 const char* metaname = lua_tostring(L,-1);
                 snprintf(buffer, BufMax, "%s: %p", metaname,ptr);
             }
-            lua_pop(L,1);
+            if(tt!=LUA_TNIL)
+                lua_pop(L,1);
         }
 
 		lua_pushstring(L, buffer);
@@ -844,6 +982,11 @@ namespace NS_SLUA {
 		if (LuaWrapper::pushValue(L, p, uss, parms))
 			return 1;
 
+		if (uss->GetName() == "LuaBPVar") {
+			((FLuaBPVar*)parms)->value.push(L);
+			return 1;
+		}
+
 		uint32 size = uss->GetStructureSize() ? uss->GetStructureSize() : 1;
 		uint8* buf = (uint8*)FMemory::Malloc(size);
 		uss->InitializeStruct(buf);
@@ -872,6 +1015,15 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION>=23) && (ENGINE_MAJOR_VERSION>=4)
 	int pushUMulticastInlineDelegateProperty(lua_State* L, UProperty* prop, uint8* parms, bool ref) {
 		auto p = Cast<UMulticastInlineDelegateProperty>(prop);
+		ensure(p);
+		FMulticastScriptDelegate* delegate = const_cast<FMulticastScriptDelegate*>(p->GetMulticastDelegate(parms));
+		return LuaMultiDelegate::push(L, delegate, p->SignatureFunction, prop->GetNameCPP());
+	}
+#endif
+
+#if (ENGINE_MINOR_VERSION>=24) && (ENGINE_MAJOR_VERSION>=4)
+	int pushUMulticastSparseDelegateProperty(lua_State* L, UProperty* prop, uint8* parms, bool ref) {
+		auto p = Cast<UMulticastSparseDelegateProperty>(prop);
 		ensure(p);
 		FMulticastScriptDelegate* delegate = const_cast<FMulticastScriptDelegate*>(p->GetMulticastDelegate(parms));
 		return LuaMultiDelegate::push(L, delegate, p->SignatureFunction, prop->GetNameCPP());
@@ -939,6 +1091,10 @@ namespace NS_SLUA {
         ensure(p);
         auto uss = p->Struct;
 
+		// if it's LuaBPVar
+		if (uss->GetName() == "LuaBPVar")
+			return FLuaBPVar::checkValue(L, p, parms, i);
+
 		// skip first char to match type
 		if (LuaObject::matchType(L, i, TCHAR_TO_UTF8(*uss->GetName()),true)) {
 			if (LuaWrapper::checkValue(L, p, uss, parms, i))
@@ -972,13 +1128,14 @@ namespace NS_SLUA {
 	bool checkType(lua_State* L, int p, const char* tn) {
 		if (!lua_isuserdata(L, p))
 			return false;
-		luaL_getmetafield(L, p, "__name");
-		if (lua_isstring(L, -1) && strcmp(tn, lua_tostring(L, -1)) == 0)
+		int tt = luaL_getmetafield(L, p, "__name");
+		if (tt==LUA_TSTRING && strcmp(tn, lua_tostring(L, -1)) == 0)
 		{
 			lua_pop(L, 1);
 			return true;
 		}
-		lua_pop(L, 1);
+		if(tt!=LUA_TNIL)
+            lua_pop(L, 1);
 		return false;
 	}
 
@@ -1190,6 +1347,9 @@ namespace NS_SLUA {
         regPusher(UMulticastDelegateProperty::StaticClass(),pushUMulticastDelegateProperty);
 #if (ENGINE_MINOR_VERSION>=23) && (ENGINE_MAJOR_VERSION>=4)
 		regPusher(UMulticastInlineDelegateProperty::StaticClass(), pushUMulticastInlineDelegateProperty);
+#endif
+#if (ENGINE_MINOR_VERSION>=24) && (ENGINE_MAJOR_VERSION>=4)
+		regPusher(UMulticastSparseDelegateProperty::StaticClass(), pushUMulticastSparseDelegateProperty);
 #endif
         regPusher(UObjectProperty::StaticClass(),pushUObjectProperty);
         regPusher(UArrayProperty::StaticClass(),pushUArrayProperty);

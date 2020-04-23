@@ -51,6 +51,7 @@ namespace NS_SLUA {
     {
 		array = new FScriptArray();
 		clone(array, p, buf);
+		shouldFree = true;
     }
 
 	LuaArray::LuaArray(UArrayProperty* p, UObject* obj)
@@ -59,14 +60,16 @@ namespace NS_SLUA {
 		, propObj(obj)
 	{
 		array = prop->ContainerPtrToValuePtr<FScriptArray>(obj);
+		shouldFree = false;
 	}
 
     LuaArray::~LuaArray() {
-		if (!propObj)
+		if (shouldFree)
 		{
 			// should destroy inner property value
 			clear();
-			if (!prop) SafeDelete(array);
+			ensure(array);
+			SafeDelete(array);
 		}
 		
 		inner = nullptr;
@@ -76,7 +79,7 @@ namespace NS_SLUA {
     void LuaArray::clear() {
         if(!inner) return;
 
-		if (!prop) {
+		if (shouldFree) {
 			uint8 *Dest = getRawPtr(0);
 			for (int32 i = 0; i < array->Num(); i++, Dest += inner->ElementSize)
 			{
@@ -88,17 +91,19 @@ namespace NS_SLUA {
 
     void LuaArray::AddReferencedObjects( FReferenceCollector& Collector )
     {
-        // I noticed this function be called in collect thread
-        // should add a lock, but I don't find any lock code in unreal engine codebase
-        // why?
-        Collector.AddReferencedObject(inner);
+        if (inner) Collector.AddReferencedObject(inner);
 		if (prop) Collector.AddReferencedObject(prop);
 		if (propObj) Collector.AddReferencedObject(propObj);
-        // if empty
-        if(num()==0) return;
-        for(int n=0;n<num();n++) {
+
+        // if empty or owner object had been collected
+		// AddReferencedObject will auto null propObj
+        if((!shouldFree && !propObj) || num()==0) return;
+		for (int n = num() - 1; n >= 0; n--) {
             void* ptr = getRawPtr(n);
-			LuaReference::addRefByProperty(Collector, inner, ptr);
+			// if AddReferencedObject collect obj
+			// we will auto remove it
+			if (LuaReference::addRefByProperty(Collector, inner, ptr))
+				remove(n);
         }
     }
 
@@ -133,7 +138,7 @@ namespace NS_SLUA {
 
     void LuaArray::destructItems(int index,int count) {
         // if array is owned by uobject, don't destructItems
-        if(prop) return;
+        if(!shouldFree) return;
         if (!(inner->PropertyFlags & (CPF_IsPlainOldData | CPF_NoDestructor)))
 		{
 			uint8 *Dest = getRawPtr(index);
@@ -177,7 +182,7 @@ namespace NS_SLUA {
 		auto type = (EPropertyClass) LuaObject::checkValue<int>(L,1);
 		auto cls = LuaObject::checkValueOpt<UClass*>(L, 2, nullptr);
         if(type==EPropertyClass::Object && !cls)
-            luaL_error(L,"Array of UObject should have secend parameter is UClass");
+            luaL_error(L,"Array of UObject should have second parameter is UClass");
 		auto array = FScriptArray();
 		return push(L, PropertyProto::createProperty({ type, cls }), &array);
     }
