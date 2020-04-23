@@ -157,6 +157,7 @@ namespace NS_SLUA {
     {
         if(name) stateName=UTF8_TO_TCHAR(name);
 		this->pGI = gameInstance;
+//        profiler.test = "aaaaaaa";
     }
 
     LuaState::~LuaState()
@@ -200,7 +201,7 @@ namespace NS_SLUA {
 		}
 
 #ifdef ENABLE_PROFILER
-		LuaProfiler::tick(L);
+		profiler.tick(L);
 #endif
 
 		PROFILER_WATCHER(w1);
@@ -328,7 +329,7 @@ namespace NS_SLUA {
         LuaArray::reg(L);
         LuaMap::reg(L);
 #ifdef ENABLE_PROFILER
-		LuaProfiler::init(L);
+		profiler.init(L);
 #endif
 		
 		onInitEvent.Broadcast();

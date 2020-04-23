@@ -41,29 +41,29 @@ namespace NS_SLUA {
     
     #include "LuaProfiler.inl"
 
-    enum class HookState {
-        UNHOOK=0,
-        HOOKED=1,
-    };
+//    enum class HookState {
+//        UNHOOK=0,
+//        HOOKED=1,
+//    };
 
     enum class RunState {
         DISCONNECT = 0,
         CONNECTED = 1,
     };
-
+LuaProfiler *profilerPtr = nullptr;
     namespace {
-        int snapshotID = 0;
-        int preSnapshotID = 0;
-        int snapshotNum = 0;
-        int snapshotDeleteID = 0;
-		LuaVar selfProfiler;
-		bool ignoreHook = false;
-		HookState currentHookState = HookState::UNHOOK;
+//        int snapshotID = 0;
+//        int preSnapshotID = 0;
+//        int snapshotNum = 0;
+//        int snapshotDeleteID = 0;
+//		LuaVar selfProfiler;
+//		bool ignoreHook = false;
+//		HookState currentHookState = HookState::UNHOOK;
 		int64 profileTotalCost = 0;
-		p_tcp tcpSocket = nullptr;
+//		p_tcp tcpSocket = nullptr;
 		const char* ChunkName = "[ProfilerScript]";
-        TMap<int, SnapshotMap> snapshotList;
-        
+//        TMap<int, SnapshotMap> snapshotList;
+//
         // copy code from buffer.cpp in luasocket
         int buffer_get(p_buffer buf, size_t *count, FArrayReader& messageReader) {
             int err = IO_DONE;
@@ -104,8 +104,9 @@ namespace NS_SLUA {
             }
             return err;
         }
-        
-        int receieveMessage(size_t wanted) {
+    }
+///////////////////////////////////////////////////////////
+        int LuaProfiler::receieveMessage(size_t wanted) {
             if(!tcpSocket || currentHookState == HookState::UNHOOK) return false;
             
             int event = 0;
@@ -144,7 +145,7 @@ namespace NS_SLUA {
             return event;
         }
         
-        void memoryGC(lua_State* L) {
+        void LuaProfiler::memoryGC(lua_State* L) {
             if(!tcpSocket) return;
             
             if(L) {
@@ -157,7 +158,7 @@ namespace NS_SLUA {
             }
         }
     
-        bool checkSocketRead() {
+        bool LuaProfiler::checkSocketRead() {
             if(!tcpSocket) return false;
             int result;
             u_long nread = 0;
@@ -173,7 +174,7 @@ namespace NS_SLUA {
         }
 
         
-		void makeProfilePackage(FArrayWriter& messageWriter,
+		void LuaProfiler::makeProfilePackage(FArrayWriter& messageWriter,
 			int hookEvent, int64 time,
 			int lineDefined, const char* funcName,
 			const char* shortSrc)
@@ -195,7 +196,7 @@ namespace NS_SLUA {
 			messageWriter << packageSize;
         }
 
-        void makeMemoryProfilePackage(FArrayWriter& messageWriter,
+        void LuaProfiler::makeMemoryProfilePackage(FArrayWriter& messageWriter,
                                 int hookEvent, TArray<LuaMemInfo> memInfoList)
         {
             uint32 packageSize = 0;
@@ -230,10 +231,11 @@ namespace NS_SLUA {
             return err;
         }
 
-		size_t sendMessage(FArrayWriter& msg) {
+		size_t LuaProfiler::sendMessage(FArrayWriter& msg) {
 			if (!tcpSocket || currentHookState == HookState::UNHOOK) return -1;
 			size_t sent;
 			int err = sendraw(&tcpSocket->buf, (const char*)msg.GetData(), msg.Num(), &sent);
+            UE_LOG(LogTemp, Warning, TEXT("Msg send tcpsocket address : %p"), tcpSocket);
 			if (err != IO_DONE) {
 				selfProfiler.callField("disconnect");
 			}
@@ -241,7 +243,7 @@ namespace NS_SLUA {
             return sent;
 		}
 
-		void takeSample(int event,int line,const char* funcname,const char* shortsrc) {
+		void LuaProfiler::takeSample(int event,int line,const char* funcname,const char* shortsrc) {
 			// clear writer;
 			static FArrayWriter s_messageWriter;
 			s_messageWriter.Empty();
@@ -250,7 +252,7 @@ namespace NS_SLUA {
 			sendMessage(s_messageWriter);
 		}
 
-        void takeMemorySample(int event, TArray<LuaMemInfo> memoryInfoList) {
+        void LuaProfiler::takeMemorySample(int event, TArray<LuaMemInfo> memoryInfoList) {
             // clear writer;
             static FArrayWriter s_memoryMessageWriter;
             s_memoryMessageWriter.Empty();
@@ -259,7 +261,7 @@ namespace NS_SLUA {
             sendMessage(s_memoryMessageWriter);
         }
         
-        size_t takeMemSnapshotSample(int event, double objSize, int memorySize, int snapshotId) {
+        size_t LuaProfiler::takeMemSnapshotSample(int event, double objSize, int memorySize, int snapshotId) {
             static FArrayWriter s_messageWriter;
             s_messageWriter.Empty();
             s_messageWriter.Seek(0);
@@ -268,7 +270,7 @@ namespace NS_SLUA {
             return sendMessage(s_messageWriter);
         }
         
-        void getMemorySnapshot(lua_State *L) {
+        void LuaProfiler::getMemorySnapshot(lua_State *L) {
             if(!tcpSocket) return;
             
             if(L) {
@@ -281,7 +283,7 @@ namespace NS_SLUA {
             }
         }
         
-        TArray<LuaMemInfo> checkSnapshotDiff() {
+        TArray<LuaMemInfo> LuaProfiler::checkSnapshotDiff() {
             TArray<LuaMemInfo> emptyList;
             if(tcpSocket && snapshotList.Contains(preSnapshotID) && snapshotList.Contains(snapshotID)) {
                 return snapshotList.FindRef(snapshotID).checkMemoryDiff(snapshotList.FindRef(preSnapshotID));
@@ -290,7 +292,7 @@ namespace NS_SLUA {
             return emptyList;
         }
         
-        void dispatchReceieveEvent(lua_State *L, int event) {
+        void LuaProfiler::dispatchReceieveEvent(lua_State *L, int event) {
             switch (event) {
                 case PHE_MEMORY_SNAPSHOT: {
                     getMemorySnapshot(L);
@@ -318,7 +320,7 @@ namespace NS_SLUA {
         }
 
 		void debug_hook(lua_State* L, lua_Debug* ar) {
-			if (ignoreHook) return;
+			if (profilerPtr->ignoreHook) return;
 			
 			lua_getinfo(L, "nSl", ar);
 
@@ -328,14 +330,13 @@ namespace NS_SLUA {
 			if (strstr(ar->short_src, ChunkName)) 
 				return;
 
-            takeSample(ar->event,ar->linedefined, ar->name ? ar->name : "", ar->short_src);
+            profilerPtr->takeSample(ar->event,ar->linedefined, ar->name ? ar->name : "", ar->short_src);
 		}
-    }
 
     int LuaProfiler::changeHookState(lua_State* L)
     {
         HookState state = (HookState)lua_tointeger(L, 1);
-        currentHookState = state;
+        profilerPtr->currentHookState = state;
         if (state == HookState::UNHOOK) {
 //                LuaMemoryProfile::stop();
             lua_sethook(L, nullptr, 0, 0);
@@ -352,16 +353,17 @@ namespace NS_SLUA {
     int LuaProfiler::setSocket(lua_State* L)
     {
         if (lua_isnil(L, 1)) {
-            tcpSocket = nullptr;
+            profilerPtr->tcpSocket = nullptr;
             return 0;
         }
-        tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
-        if (!tcpSocket) luaL_error(L, "Set invalid socket");
+        profilerPtr->tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
+        if (!profilerPtr->tcpSocket) luaL_error(L, "Set invalid socket");
         return 0;
     }
 
 	void LuaProfiler::init(lua_State* L)
 	{
+        profilerPtr = this;
         currentHookState = HookState::UNHOOK;
 		auto ls = LuaState::get(L);
 		ensure(ls);
@@ -421,8 +423,8 @@ namespace NS_SLUA {
 	}
 
     void dumpLastSnapshotInfo() {
-        if(snapshotList.Contains(snapshotList.Num()))
-            SnapshotMap::printMap(snapshotList.FindRef(snapshotList.Num()));
+        if(profilerPtr->snapshotList.Contains(profilerPtr->snapshotList.Num()))
+            SnapshotMap::printMap(profilerPtr->snapshotList.FindRef(profilerPtr->snapshotList.Num()));
     }
     
     static FAutoConsoleCommand CVarDumpLastSnpashotInfo(

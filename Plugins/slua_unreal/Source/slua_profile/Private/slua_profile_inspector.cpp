@@ -1690,11 +1690,11 @@ void SProfilerInspector::CollectSnapshotInfo(TArray<SnapshotInfo> snapshotArray)
     snapshotListView->RequestListRefresh();
 }
 
-#define TABLE 1
-#define FUNCTION 2
-#define THREAD 3
-#define USERDATA 4
-#define OTHERS 5
+#define LUA_TABLE 1
+#define LUA_FUNCTION 2
+#define LUA_THREAD 3
+#define LUA_USERDATA 4
+#define LUA_OTHERS 5
 
 void SProfilerInspector::CollectSnapshotDiff(TArray<NS_SLUA::LuaMemInfo> diffArray)
 {
@@ -1709,52 +1709,52 @@ void SProfilerInspector::CollectSnapshotDiff(TArray<NS_SLUA::LuaMemInfo> diffArr
         {
             if(item.hint.Equals("Table", ESearchCase::CaseSensitive))
             {
-                id = TABLE;
+                id = LUA_TABLE;
             }
             else if(item.hint.Equals("Function", ESearchCase::CaseSensitive))
             {
-                id = FUNCTION;
+                id = LUA_FUNCTION;
                 if(objNum)
                 {
                     FileMemInfo *info = new FileMemInfo();
                     info->hint = FString("Table");
                     info->size = LABEL;
-                    info->difference = TABLE;
+                    info->difference = LUA_TABLE;
                     snapshotDiffParentArray.Add(MakeShareable(info));
                 }
             }
             else if(item.hint.Equals("Thread", ESearchCase::CaseSensitive))
             {
-                id = THREAD;
+                id = LUA_THREAD;
                 if(objNum)
                 {
                     FileMemInfo *info = new FileMemInfo();
                     info->hint = FString("Function");
                     info->size = LABEL;
-                    info->difference = FUNCTION;
+                    info->difference = LUA_FUNCTION;
                     snapshotDiffParentArray.Add(MakeShareable(info));
                 }
             }
             else if(item.hint.Equals("Userdata", ESearchCase::CaseSensitive))
             {
-                id = USERDATA;
+                id = LUA_USERDATA;
                 if(objNum) {
                     FileMemInfo *info = new FileMemInfo();
                     info->hint = FString("Thread");
                     info->size = LABEL;
-                    info->difference = THREAD;
+                    info->difference = LUA_THREAD;
                     snapshotDiffParentArray.Add(MakeShareable(info));
                 }
             }
             else if(item.hint.Equals("OtherType", ESearchCase::CaseSensitive))
             {
-                id = OTHERS;
+                id = LUA_OTHERS;
                 if(objNum)
                 {
                     FileMemInfo *info = new FileMemInfo();
                     info->hint = FString("Userdata");
                     info->size = LABEL;
-                    info->difference = USERDATA;
+                    info->difference = LUA_USERDATA;
                     snapshotDiffParentArray.Add(MakeShareable(info));
                 }
             }
