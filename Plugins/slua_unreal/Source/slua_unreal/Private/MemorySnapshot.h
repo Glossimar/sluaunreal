@@ -11,12 +11,13 @@
 // software distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
+#ifndef MEMORYSNAPSHOT_H_
+#define MEMORYSNAPSHOT_H_
 
 #pragma once
 #include "Containers/Array.h"
 #include "Containers/Map.h"
 #include "LuaMemoryProfile.h"
-#include "LuaState.h"
 #include "lua/lua.hpp"
 
 #define TABLE 0
@@ -69,3 +70,4 @@ namespace NS_SLUA {
         void markOthers(const void *parent, FString description);
     };
 }
+#endif
