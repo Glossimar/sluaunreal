@@ -147,6 +147,9 @@ namespace slua {
 		bool Deserialize(const TSharedPtr<FArrayReader, ESPMode::ThreadSafe>& Message);
 
 	public:
+		// To distinguish received data sent by different connections
+		int connectionId;
+
 		int Event;
 		int64 Time;
 

@@ -234,6 +234,7 @@ namespace NS_SLUA {
 			FWorldDelegates::OnWorldCleanup.Remove(wcHandler);
             stateMapFromIndex.Remove(si);
             L=nullptr;
+			profiler.luaState = L;
         }
 		freeDeferObject();
 		objRefs.Empty();

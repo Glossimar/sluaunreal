@@ -297,11 +297,11 @@ void Fslua_profileModule::AddMenuExtension(FMenuBuilder & Builder)
 
 void Fslua_profileModule::OnTabClosed(TSharedRef<SDockTab>)
 {
-//    if (sluaProfilerInspector->ProfileServer)
-//    {
-//        delete sluaProfilerInspector->ProfileServer;
-//        sluaProfilerInspector->ProfileServer = nullptr;
-//    }
+    //if (sluaProfilerInspector->ProfileServer)
+    //{
+    //    delete sluaProfilerInspector->ProfileServer.Get();
+    //    sluaProfilerInspector->ProfileServer = nullptr;
+    //}
 	tabOpened = false;
 }
 
