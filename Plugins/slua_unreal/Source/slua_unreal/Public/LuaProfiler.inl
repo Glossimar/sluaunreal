@@ -69,9 +69,10 @@ function this.printToConsole(str, printLevel)
     print("[Slua Profile] ".. tostring(str))
 end
 
-function this.changeRunState(state)
-    this.currentRunState = state
-end
+-- function this.changeRunState(state)
+--    this.currentRunState = state
+--	this.printToConsole("state is "..)
+-- end
 
 function this.reGetSock()
     if sock ~= nil then
