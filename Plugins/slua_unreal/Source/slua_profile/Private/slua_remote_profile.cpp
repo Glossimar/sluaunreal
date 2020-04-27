@@ -17,6 +17,7 @@
 #include "SharedPointer.h"
 #include "SocketSubsystem.h"
 #include "SluaUtil.h"
+#include "stdio.h"
 #include "LuaProfiler.h"
 
 namespace slua
@@ -89,16 +90,19 @@ namespace slua
 				}
 			}
 
+			int connIndex = 0;
 			for (auto& conn : Connections)
 			{
 				TSharedPtr<FProfileMessage, ESPMode::ThreadSafe> Message;
-
-				while (conn->ReceiveData(Message))
+				TSharedPtr<FProfileConnection> connection = conn;
+				
+				while (conn->Inbox.Dequeue(Message))
 				{
+					Message->connectionId = connIndex++;
 					OnProfileMessageDelegate.ExecuteIfBound(Message);
 				}
                 
-				break;
+//				break;
 			}
 
 			FPlatformProcess::Sleep(ActiveConnections > 0 ? 0.01f : 1.f);
@@ -324,9 +328,10 @@ namespace slua
 				if (RecvMessageDataRemaining == 0)
 				{
                     FProfileMessage* DeserializedMessage = new FProfileMessage();
+
                     if (DeserializedMessage->Deserialize(RecvMessageData))
                     {
-                        Inbox.Enqueue(MakeShareable(DeserializedMessage));
+						Inbox.Enqueue(MakeShareable(DeserializedMessage));
                     }
 					RecvMessageData.Reset();
 				}

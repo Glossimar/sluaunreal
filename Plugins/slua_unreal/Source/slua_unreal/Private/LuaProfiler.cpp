@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 
-#include "LuaProfiler.h"
 #include "Log.h"
 #include "LuaState.h"
+#include "Containers/Map.h"
 #include "ArrayWriter.h"
 #include "ArrayReader.h"
 #include "MemorySnapshot.h"
@@ -22,13 +22,7 @@
 #include "luasocket/auxiliar.h"
 #include "luasocket/buffer.h"
 #include "lua/lua.hpp"
-
-#if PLATFORM_WINDOWS
-#ifdef TEXT
-#undef TEXT
-#endif
-#endif
-#include "luasocket/tcp.h"
+#include "LuaProfiler.h"
 
 #if PLATFORM_WINDOWS
 #include <winsock2.h>
@@ -39,33 +33,16 @@
 #ifdef ENABLE_PROFILER
 namespace NS_SLUA {
     
-    #include "LuaProfiler.inl"
+ #include "LuaProfiler.inl"
 
-//    enum class HookState {
-//        UNHOOK=0,
-//        HOOKED=1,
-//    };
+TMap<lua_State*, LuaProfiler*> profilerMap;
 
-    enum class RunState {
-        DISCONNECT = 0,
-        CONNECTED = 1,
-    };
-LuaProfiler *profilerPtr = nullptr;
-    namespace {
-//        int snapshotID = 0;
-//        int preSnapshotID = 0;
-//        int snapshotNum = 0;
-//        int snapshotDeleteID = 0;
-//		LuaVar selfProfiler;
-//		bool ignoreHook = false;
-//		HookState currentHookState = HookState::UNHOOK;
-		int64 profileTotalCost = 0;
-//		p_tcp tcpSocket = nullptr;
-		const char* ChunkName = "[ProfilerScript]";
-//        TMap<int, SnapshotMap> snapshotList;
-//
+namespace {
+	int64 profileTotalCost = 0;
+	const char* ChunkName = "[ProfilerScript]";
+}
         // copy code from buffer.cpp in luasocket
-        int buffer_get(p_buffer buf, size_t *count, FArrayReader& messageReader) {
+        int LuaProfiler::buffer_get(p_buffer buf, size_t *count, FArrayReader& messageReader) {
             int err = IO_DONE;
             p_io io = buf->io;
             p_timeout tm = buf->tm;
@@ -82,7 +59,7 @@ LuaProfiler *profilerPtr = nullptr;
         }
         
         // copy code from buffer.cpp in luasocket
-        void buffer_skip(p_buffer buf, size_t count) {
+        void LuaProfiler::buffer_skip(p_buffer buf, size_t count) {
             buf->received += count;
             buf->first += count;
             if (buffer_isempty(buf))
@@ -90,7 +67,7 @@ LuaProfiler *profilerPtr = nullptr;
         }
         
         // copy code from buffer.cpp in luasocket
-        int recvraw(p_buffer buf, size_t wanted, FArrayReader& messageReader) {
+        int LuaProfiler::recvraw(p_buffer buf, size_t wanted, FArrayReader& messageReader) {
             int err = IO_DONE;
             size_t total = 0;
             while (err == IO_DONE) {
@@ -104,7 +81,6 @@ LuaProfiler *profilerPtr = nullptr;
             }
             return err;
         }
-    }
 ///////////////////////////////////////////////////////////
         int LuaProfiler::receieveMessage(size_t wanted) {
             if(!tcpSocket || currentHookState == HookState::UNHOOK) return false;
@@ -214,9 +190,9 @@ LuaProfiler *profilerPtr = nullptr;
         
         // copy code from buffer.cpp in luasocket
         #define STEPSIZE 8192
-        int sendraw(p_buffer buf, const char* data, size_t count, size_t * sent) {
-            p_io io = buf->io;
-            if (!io) return IO_CLOSED;
+        int LuaProfiler::sendraw(p_buffer buf, const char* data, size_t count, size_t * sent) {		
+            if (!tcpSocket || luaState == nullptr) return IO_CLOSED;
+			p_io io = buf->io;
             p_timeout tm = buf->tm;
             size_t total = 0;
             int err = IO_DONE;
@@ -235,7 +211,6 @@ LuaProfiler *profilerPtr = nullptr;
 			if (!tcpSocket || currentHookState == HookState::UNHOOK) return -1;
 			size_t sent;
 			int err = sendraw(&tcpSocket->buf, (const char*)msg.GetData(), msg.Num(), &sent);
-            UE_LOG(LogTemp, Warning, TEXT("Msg send tcpsocket address : %p"), tcpSocket);
 			if (err != IO_DONE) {
 				selfProfiler.callField("disconnect");
 			}
@@ -320,6 +295,8 @@ LuaProfiler *profilerPtr = nullptr;
         }
 
 		void debug_hook(lua_State* L, lua_Debug* ar) {
+
+			LuaProfiler* profilerPtr = profilerMap.FindRef(L);
 			if (profilerPtr->ignoreHook) return;
 			
 			lua_getinfo(L, "nSl", ar);
@@ -335,8 +312,9 @@ LuaProfiler *profilerPtr = nullptr;
 
     int LuaProfiler::changeHookState(lua_State* L)
     {
+		LuaProfiler* profilerPtr = profilerMap.FindRef(L);
         HookState state = (HookState)lua_tointeger(L, 1);
-        profilerPtr->currentHookState = state;
+		profilerPtr->currentHookState = state;
         if (state == HookState::UNHOOK) {
 //                LuaMemoryProfile::stop();
             lua_sethook(L, nullptr, 0, 0);
@@ -350,37 +328,47 @@ LuaProfiler *profilerPtr = nullptr;
         return 0;
     }
 
+	int LuaProfiler::changeRunState(lua_State* L)
+	{
+		LuaProfiler* profilerPtr = profilerMap.FindRef(L);
+		RunState state = (RunState)lua_tointeger(L, 1);
+		profilerPtr->currentRunState = state;
+		return 0;
+	 }
+
     int LuaProfiler::setSocket(lua_State* L)
     {
+		LuaProfiler* profilerPtr = profilerMap.FindRef(L);
         if (lua_isnil(L, 1)) {
-            profilerPtr->tcpSocket = nullptr;
+			profilerPtr->tcpSocket = nullptr;
             return 0;
         }
-        profilerPtr->tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
+		profilerPtr->tcpSocket = (p_tcp)auxiliar_checkclass(L, "tcp{client}", 1);
         if (!profilerPtr->tcpSocket) luaL_error(L, "Set invalid socket");
         return 0;
     }
 
 	void LuaProfiler::init(lua_State* L)
 	{
-        profilerPtr = this;
+		profilerMap.Add(L, this);
+		luaState = L;
         currentHookState = HookState::UNHOOK;
 		auto ls = LuaState::get(L);
 		ensure(ls);
-//        if(!selfProfiler.isValid())
-//        {
         selfProfiler = ls->doBuffer((const uint8*)ProfilerScript,strlen(ProfilerScript), ChunkName);
         ensure(selfProfiler.isValid());
         selfProfiler.push(L);
         lua_pushcfunction(L, &LuaProfiler::changeHookState);
         lua_setfield(L, -2, "changeHookState");
+		lua_pushcfunction(L, &LuaProfiler::changeRunState);
+		lua_setfield(L, -2, "changeRunState");
         lua_pushcfunction(L, &LuaProfiler::setSocket);
         lua_setfield(L, -2, "setSocket");
+
         // using native hook instead of lua hook for performance
         // set selfProfiler to global as slua_profiler
         lua_setglobal(L, "slua_profile");
         ensure(lua_gettop(L) == 0);
-//        }
 	}
 
 	void LuaProfiler::tick(lua_State* L)
@@ -391,8 +379,7 @@ LuaProfiler *profilerPtr = nullptr;
             ignoreHook = false;
 			return;
 		}
-    
-		RunState currentRunState = (RunState)selfProfiler.getFromTable<int>("currentRunState");
+
 		if (currentRunState == RunState::CONNECTED) {
             TArray<LuaMemInfo> memoryInfoList;
             
@@ -411,6 +398,9 @@ LuaProfiler *profilerPtr = nullptr;
 		ignoreHook = false;
 	}
     
+	LuaProfiler::LuaProfiler()
+	{
+	}
 
 	LuaProfiler::LuaProfiler(const char* funcName)
 	{
@@ -421,17 +411,6 @@ LuaProfiler *profilerPtr = nullptr;
 	{
         takeSample(ProfilerHookEvent::PHE_RETURN, 0, "", "");
 	}
-
-    void dumpLastSnapshotInfo() {
-        if(profilerPtr->snapshotList.Contains(profilerPtr->snapshotList.Num()))
-            SnapshotMap::printMap(profilerPtr->snapshotList.FindRef(profilerPtr->snapshotList.Num()));
-    }
-    
-    static FAutoConsoleCommand CVarDumpLastSnpashotInfo(
-                                                    TEXT("slua.DumpLastSnapshot"),
-                                                    TEXT("Dump last memory snapshot information"),
-                                                    FConsoleCommandDelegate::CreateStatic(dumpLastSnapshotInfo),
-                                                    ECVF_Cheat);
-    }
+ }
 
 #endif
