@@ -93,9 +93,8 @@ namespace slua
 			for (auto& conn : Connections)
 			{
 				TSharedPtr<FProfileMessage, ESPMode::ThreadSafe> Message;
-				TSharedPtr<FProfileConnection> connection = conn;
 				
-				while (conn->Inbox.Dequeue(Message))
+				while (conn->ReceiveData(Message))
 				{
 					Message->connectionId = connIndex++;
 					OnProfileMessageDelegate.ExecuteIfBound(Message);

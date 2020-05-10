@@ -138,9 +138,11 @@ void  SProfilerInspector::CopyFunctionNode(TSharedPtr<FunctionProfileInfo>& oldF
 void SProfilerInspector::Refresh(TArray<SluaProfiler>& profilersArray, TArray<NS_SLUA::LuaMemInfo>& memoryInfoList,
 	TArray<SnapshotInfo> snapshotArray, TArray<NS_SLUA::LuaMemInfo> snapshotDifferentArray)
 {	
-	if (stopChartRolling == true || profilersArray.Num() == 0)
-	{
-        if(stopChartRolling || memoryInfoList.Num()) CollectMemoryNode(memoryInfoList);
+	if (stopChartRolling == true) return;
+
+	if (profilersArray.Num() == 0) 
+	{		
+        if( memoryInfoList.Num()) CollectMemoryNode(memoryInfoList);
         if(snapshotArray.Num()) CollectSnapshotInfo(snapshotArray);
         if(snapshotDifferentArray.Num()) CollectSnapshotDiff(snapshotDifferentArray);
 
